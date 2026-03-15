@@ -33,14 +33,14 @@ That's it. No `npm install`. No build step. No server.
 
 ### AIPassport mode
 
-Use this when you don't want to paste a raw API key into the browser. Requires a running AIPassport broker instance.
+Use this when you don't want to paste a raw API key into the browser. Requires a running [AIPassport](https://github.com/devrelopers/AIPassport) broker instance.
 
 1. Open `index.html` and click the **AIPassport** toggle
 2. Enter the broker URL (defaults to `http://localhost:3001`)
 3. Paste a JWT token issued by the broker
 4. Type a repo → **Read Mood**
 
-The broker URL and JWT are never sent to Anthropic — the broker proxies the request server-side, injecting its own API key.
+The broker URL and JWT are never sent to Anthropic — the broker proxies the request server-side, injecting its own API key. See [AIPassport](https://github.com/devrelopers/AIPassport) for setup instructions.
 
 ## What It Reads
 
