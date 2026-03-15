@@ -6,8 +6,6 @@
 
 Zero dependencies. One file. Pure vibes.
 
-![repo-mood screenshot](screenshot.png)
-
 ## The Mood Spectrum
 
 | Mood | Ring Color | What it means |
@@ -22,12 +20,27 @@ Zero dependencies. One file. Pure vibes.
 
 ## Quick Start
 
+The app has two modes, toggled with the **Direct / AIPassport** switch below the header.
+
+### Direct mode (default)
+
 1. Grab an [Anthropic API key](https://console.anthropic.com/)
 2. Open `index.html` in any browser
 3. Type a repo (e.g. `facebook/react`, `torvalds/linux`)
 4. Paste your key → **Read Mood**
 
 That's it. No `npm install`. No build step. No server.
+
+### AIPassport mode
+
+Use this when you don't want to paste a raw API key into the browser. Requires a running AIPassport broker instance.
+
+1. Open `index.html` and click the **AIPassport** toggle
+2. Enter the broker URL (defaults to `http://localhost:3001`)
+3. Paste a JWT token issued by the broker
+4. Type a repo → **Read Mood**
+
+The broker URL and JWT are never sent to Anthropic — the broker proxies the request server-side, injecting its own API key.
 
 ## What It Reads
 

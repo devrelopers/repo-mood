@@ -147,6 +147,73 @@
     .signal-grid { grid-template-columns: repeat(2, 1fr); }
   }
 
+  .mode-toggle {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1rem;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .mode-toggle button {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    padding: 0.4rem 1.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+
+  .mode-toggle button:first-child {
+    border-radius: 6px 0 0 6px;
+    border-right: none;
+  }
+
+  .mode-toggle button:last-child {
+    border-radius: 0 6px 6px 0;
+  }
+
+  .mode-toggle button.active {
+    background: #58a6ff;
+    color: #fff;
+    border-color: #58a6ff;
+  }
+
+  .mode-toggle button.active + button {
+    border-left-color: #58a6ff;
+  }
+
+  .passport-fields {
+    display: none;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .passport-fields.visible {
+    display: flex;
+  }
+
+  .passport-fields input {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 0.55rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .passport-fields input:focus { border-color: #58a6ff; }
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
@@ -165,10 +232,20 @@
 <h1>repo-mood</h1>
 <p class="subtitle">Feel the vibe of any GitHub repo</p>
 
+<div class="mode-toggle">
+  <button id="mode-direct" class="active" onclick="setMode('direct')">Direct</button>
+  <button id="mode-passport" onclick="setMode('passport')">AIPassport</button>
+</div>
+
 <div class="controls">
   <input type="text" id="repo-input" placeholder="owner/repo" spellcheck="false">
   <input type="password" id="api-key-input" placeholder="Anthropic API key">
   <button id="read-btn">Read Mood</button>
+</div>
+
+<div class="passport-fields" id="passport-fields">
+  <input type="text" id="broker-url-input" placeholder="Broker URL" value="http://localhost:3001">
+  <input type="password" id="jwt-input" placeholder="JWT token">
 </div>
 
 <div id="error" class="error-msg"></div>
@@ -191,6 +268,16 @@
 </div>
 
 <script>
+let currentMode = 'direct';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-direct').classList.toggle('active', mode === 'direct');
+  document.getElementById('mode-passport').classList.toggle('active', mode === 'passport');
+  document.getElementById('api-key-input').style.display = mode === 'direct' ? '' : 'none';
+  document.getElementById('passport-fields').classList.toggle('visible', mode === 'passport');
+}
+
 const MOOD_COLORS = {
   thriving:    '#1D9E75',
   excited:     '#EF9F27',
@@ -314,7 +401,7 @@ async function fetchSignals(owner, repo) {
   };
 }
 
-async function synthesizeMood(signals, apiKey) {
+async function synthesizeMood(signals, opts) {
   const prompt = `You are repo-mood, an AI that reads the emotional state of a GitHub repository from its signals.
 
 Signals:
@@ -332,24 +419,35 @@ Then write a one-sentence "reading" (max 20 words) that evocatively captures the
 
 Respond with ONLY valid JSON: {"mood":"<word>","reading":"<sentence>"}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 150,
-      messages: [{ role: 'user', content: prompt }]
-    })
+  const body = JSON.stringify({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 150,
+    messages: [{ role: 'user', content: prompt }]
   });
 
+  let url, headers;
+  if (opts.mode === 'passport') {
+    url = opts.brokerURL.replace(/\/+$/, '') + '/proxy/chat';
+    headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + opts.jwt
+    };
+  } else {
+    url = 'https://api.anthropic.com/v1/messages';
+    headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': opts.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+  }
+
+  const res = await fetch(url, { method: 'POST', headers, body });
+
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Anthropic API error: ${res.status} — ${body}`);
+    const errBody = await res.text();
+    const label = opts.mode === 'passport' ? 'Broker' : 'Anthropic API';
+    throw new Error(`${label} error: ${res.status} — ${errBody}`);
   }
 
   const data = await res.json();
@@ -372,7 +470,6 @@ function updateSignalGrid(signals) {
 
 async function run() {
   const repoInput = document.getElementById('repo-input').value.trim();
-  const apiKey = document.getElementById('api-key-input').value.trim();
   const errorEl = document.getElementById('error');
   errorEl.textContent = '';
   document.getElementById('mood-word').textContent = '';
@@ -383,9 +480,18 @@ async function run() {
     errorEl.textContent = 'Enter a repo as owner/repo';
     return;
   }
-  if (!apiKey) {
-    errorEl.textContent = 'Enter your Anthropic API key';
-    return;
+
+  let opts;
+  if (currentMode === 'passport') {
+    const brokerURL = document.getElementById('broker-url-input').value.trim();
+    const jwt = document.getElementById('jwt-input').value.trim();
+    if (!brokerURL) { errorEl.textContent = 'Enter the broker URL'; return; }
+    if (!jwt) { errorEl.textContent = 'Enter your JWT token'; return; }
+    opts = { mode: 'passport', brokerURL, jwt };
+  } else {
+    const apiKey = document.getElementById('api-key-input').value.trim();
+    if (!apiKey) { errorEl.textContent = 'Enter your Anthropic API key'; return; }
+    opts = { mode: 'direct', apiKey };
   }
 
   const [owner, repo] = repoInput.split('/');
@@ -396,7 +502,7 @@ async function run() {
   try {
     const signals = await fetchSignals(owner, repo);
     updateSignalGrid(signals);
-    const result = await synthesizeMood(signals, apiKey);
+    const result = await synthesizeMood(signals, opts);
     setLoading(false);
     setMoodResult(result.mood, result.reading);
   } catch (err) {
@@ -413,6 +519,12 @@ document.getElementById('repo-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') run();
 });
 document.getElementById('api-key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') run();
+});
+document.getElementById('broker-url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') run();
+});
+document.getElementById('jwt-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') run();
 });
 
