@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>repo-mood</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: #e6edf3;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 1.5rem;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 2rem;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .controls input {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 0.55rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .controls input:focus { border-color: #58a6ff; }
+  .controls input[type="text"] { flex: 1; min-width: 180px; }
+  .controls input[type="password"] { flex: 1; min-width: 180px; }
+
+  .controls button {
+    background: #238636;
+    color: #fff;
+    border: none;
+    padding: 0.55rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .controls button:hover { background: #2ea043; }
+  .controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .ring-container {
+    position: relative;
+    width: 260px;
+    height: 260px;
+    margin-bottom: 1rem;
+  }
+
+  .ring-container svg { width: 100%; height: 100%; }
+
+  .mood-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .mood-label .mood-word {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #e6edf3;
+    text-transform: capitalize;
+  }
+
+  .mood-label .mood-reading {
+    font-size: 0.75rem;
+    color: #8b949e;
+    max-width: 140px;
+    margin-top: 0.25rem;
+    line-height: 1.3;
+  }
+
+  .signal-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    max-width: 480px;
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .signal-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+  }
+
+  .signal-card .label {
+    font-size: 0.7rem;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+
+  .signal-card .value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e6edf3;
+  }
+
+  .error-msg {
+    color: #f85149;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    max-width: 480px;
+  }
+
+  @media (max-width: 500px) {
+    .signal-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .ring-spinning { animation: spin 2s linear infinite; }
+  .ring-breathing { animation: breathe 3s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<h1>repo-mood</h1>
+<p class="subtitle">Feel the vibe of any GitHub repo</p>
+
+<div class="controls">
+  <input type="text" id="repo-input" placeholder="owner/repo" spellcheck="false">
+  <input type="password" id="api-key-input" placeholder="Anthropic API key">
+  <button id="read-btn">Read Mood</button>
+</div>
+
+<div id="error" class="error-msg"></div>
+
+<div class="ring-container">
+  <svg id="ring-svg" viewBox="0 0 260 260"></svg>
+  <div class="mood-label">
+    <div class="mood-word" id="mood-word"></div>
+    <div class="mood-reading" id="mood-reading"></div>
+  </div>
+</div>
+
+<div class="signal-grid" id="signal-grid" style="display:none;">
+  <div class="signal-card"><div class="label">Last Push</div><div class="value" id="sig-push">—</div></div>
+  <div class="signal-card"><div class="label">30d Commits</div><div class="value" id="sig-commits">—</div></div>
+  <div class="signal-card"><div class="label">Open Issues</div><div class="value" id="sig-issues">—</div></div>
+  <div class="signal-card"><div class="label">Open PRs</div><div class="value" id="sig-prs">—</div></div>
+  <div class="signal-card"><div class="label">Branches</div><div class="value" id="sig-branches">—</div></div>
+  <div class="signal-card"><div class="label">Stars</div><div class="value" id="sig-stars">—</div></div>
+</div>
+
+<script>
+const MOOD_COLORS = {
+  thriving:    '#1D9E75',
+  excited:     '#EF9F27',
+  focused:     '#378ADD',
+  coasting:    '#7F77DD',
+  overwhelmed: '#D85A30',
+  dormant:     '#888780',
+  abandoned:   '#B4B2A9'
+};
+
+const SEGMENTS = 28;
+const CX = 130, CY = 130, R = 110, STROKE = 18;
+const IDLE_COLOR = '#30363d';
+
+function buildRing() {
+  const svg = document.getElementById('ring-svg');
+  svg.innerHTML = '';
+  const gap = 3;
+  const totalDeg = 360;
+  const segDeg = (totalDeg - gap * SEGMENTS) / SEGMENTS;
+
+  for (let i = 0; i < SEGMENTS; i++) {
+    const startAngle = i * (segDeg + gap);
+    const endAngle = startAngle + segDeg;
+    const opacity = 0.35 + 0.65 * (i / (SEGMENTS - 1));
+    const path = arcPath(CX, CY, R, startAngle, endAngle);
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('d', path);
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', IDLE_COLOR);
+    el.setAttribute('stroke-width', STROKE);
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('opacity', opacity);
+    el.dataset.index = i;
+    svg.appendChild(el);
+  }
+}
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const s = (startDeg - 90) * Math.PI / 180;
+  const e = (endDeg - 90) * Math.PI / 180;
+  const x1 = cx + r * Math.cos(s);
+  const y1 = cy + r * Math.sin(s);
+  const x2 = cx + r * Math.cos(e);
+  const y2 = cy + r * Math.sin(e);
+  const large = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+}
+
+function setRingColor(color) {
+  const svg = document.getElementById('ring-svg');
+  svg.querySelectorAll('path').forEach(p => p.setAttribute('stroke', color));
+}
+
+function setLoading(on) {
+  const svg = document.getElementById('ring-svg');
+  if (on) {
+    setRingColor(IDLE_COLOR);
+    svg.classList.add('ring-spinning');
+    svg.classList.remove('ring-breathing');
+  } else {
+    svg.classList.remove('ring-spinning');
+  }
+}
+
+function setMoodResult(mood, reading) {
+  const svg = document.getElementById('ring-svg');
+  const color = MOOD_COLORS[mood] || IDLE_COLOR;
+  setRingColor(color);
+  svg.classList.add('ring-breathing');
+  document.getElementById('mood-word').textContent = mood;
+  document.getElementById('mood-reading').textContent = reading;
+}
+
+function relativeTime(dateStr) {
+  if (!dateStr) return '—';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return days + 'd ago';
+  const months = Math.floor(days / 30);
+  return months + 'mo ago';
+}
+
+function formatNum(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+async function ghFetch(path) {
+  const res = await fetch('https://api.github.com' + path);
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status} on ${path}`);
+  return res.json();
+}
+
+async function fetchSignals(owner, repo) {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+
+  const [repoData, commits, issues, pulls, branches] = await Promise.all([
+    ghFetch(`/repos/${owner}/${repo}`),
+    ghFetch(`/repos/${owner}/${repo}/commits?per_page=100&since=${since}`),
+    ghFetch(`/repos/${owner}/${repo}/issues?state=open&per_page=100`),
+    ghFetch(`/repos/${owner}/${repo}/pulls?state=open&per_page=100`),
+    ghFetch(`/repos/${owner}/${repo}/branches?per_page=100`)
+  ]);
+
+  const openIssues = issues.filter(i => !i.pull_request);
+
+  return {
+    stars: repoData.stargazers_count,
+    lastPush: repoData.pushed_at,
+    description: repoData.description || 'No description',
+    language: repoData.language || 'Unknown',
+    commitCount: commits.length,
+    openIssueCount: openIssues.length,
+    openPrCount: pulls.length,
+    branchCount: branches.length
+  };
+}
+
+async function synthesizeMood(signals, apiKey) {
+  const prompt = `You are repo-mood, an AI that reads the emotional state of a GitHub repository from its signals.
+
+Signals:
+- Description: ${signals.description}
+- Primary language: ${signals.language}
+- Stars: ${signals.stars}
+- Last push: ${signals.lastPush}
+- Commits in last 30 days: ${signals.commitCount}
+- Open issues (excluding PRs): ${signals.openIssueCount}
+- Open pull requests: ${signals.openPrCount}
+- Branches: ${signals.branchCount}
+
+Pick exactly one mood from: thriving, excited, focused, coasting, overwhelmed, dormant, abandoned.
+Then write a one-sentence "reading" (max 20 words) that evocatively captures the repo's current vibe.
+
+Respond with ONLY valid JSON: {"mood":"<word>","reading":"<sentence>"}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 150,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Anthropic API error: ${res.status} — ${body}`);
+  }
+
+  const data = await res.json();
+  const text = data.content[0].text.trim();
+  const parsed = JSON.parse(text);
+
+  if (!MOOD_COLORS[parsed.mood]) throw new Error('Invalid mood returned: ' + parsed.mood);
+  return parsed;
+}
+
+function updateSignalGrid(signals) {
+  document.getElementById('sig-push').textContent = relativeTime(signals.lastPush);
+  document.getElementById('sig-commits').textContent = formatNum(signals.commitCount);
+  document.getElementById('sig-issues').textContent = formatNum(signals.openIssueCount);
+  document.getElementById('sig-prs').textContent = formatNum(signals.openPrCount);
+  document.getElementById('sig-branches').textContent = formatNum(signals.branchCount);
+  document.getElementById('sig-stars').textContent = formatNum(signals.stars);
+  document.getElementById('signal-grid').style.display = 'grid';
+}
+
+async function run() {
+  const repoInput = document.getElementById('repo-input').value.trim();
+  const apiKey = document.getElementById('api-key-input').value.trim();
+  const errorEl = document.getElementById('error');
+  errorEl.textContent = '';
+  document.getElementById('mood-word').textContent = '';
+  document.getElementById('mood-reading').textContent = '';
+  document.getElementById('signal-grid').style.display = 'none';
+
+  if (!repoInput.includes('/')) {
+    errorEl.textContent = 'Enter a repo as owner/repo';
+    return;
+  }
+  if (!apiKey) {
+    errorEl.textContent = 'Enter your Anthropic API key';
+    return;
+  }
+
+  const [owner, repo] = repoInput.split('/');
+  const btn = document.getElementById('read-btn');
+  btn.disabled = true;
+  setLoading(true);
+
+  try {
+    const signals = await fetchSignals(owner, repo);
+    updateSignalGrid(signals);
+    const result = await synthesizeMood(signals, apiKey);
+    setLoading(false);
+    setMoodResult(result.mood, result.reading);
+  } catch (err) {
+    setLoading(false);
+    setRingColor(IDLE_COLOR);
+    errorEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('read-btn').addEventListener('click', run);
+document.getElementById('repo-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') run();
+});
+document.getElementById('api-key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') run();
+});
+
+buildRing();
+</script>
+</body>
+</html>
